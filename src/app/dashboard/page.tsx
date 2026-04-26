@@ -236,7 +236,14 @@ function ChildCard({
       <header className="px-8 pt-8 pb-6 border-b border-rule">
         <div className="flex items-baseline gap-4 flex-wrap justify-between">
           <div className="flex items-baseline gap-4 flex-wrap">
-            <h2 className="m-0">{child.name}</h2>
+            <h2 className="m-0">
+              <Link
+                href={`/children/${child.id}`}
+                className="hover:text-accent transition-colors"
+              >
+                {child.name}
+              </Link>
+            </h2>
             {age !== null && (
               <span className="editorial-meta">
                 {age === 0 ? 'under 1' : `age ${age}`}
@@ -272,12 +279,15 @@ function ChildCard({
         <div className="px-8 py-6">
           <div className="flex items-baseline justify-between mb-4">
             <p className="editorial-meta uppercase">Library</p>
-            <span className="editorial-meta">
-              {screenings.length} {screenings.length === 1 ? 'title' : 'titles'}
-            </span>
+            <Link
+              href={`/children/${child.id}`}
+              className="editorial-meta hover:text-ink transition-colors"
+            >
+              View all {screenings.length} →
+            </Link>
           </div>
           <ul className="divide-y divide-rule -mx-2">
-            {screenings.map((s) => (
+            {screenings.slice(0, 5).map((s) => (
               <li key={s.id}>
                 <Link
                   href={`/titles/${s.title_id}?child=${child.id}`}

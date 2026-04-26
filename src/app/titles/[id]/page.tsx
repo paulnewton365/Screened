@@ -9,6 +9,7 @@ import { Scorecard } from '@/components/titles/Scorecard';
 import { ThemesList } from '@/components/titles/ThemesList';
 import { CertificationBlock } from '@/components/titles/CertificationBlock';
 import { FitVerdictCard } from '@/components/titles/FitVerdictCard';
+import { RefreshAnalysisButton } from '@/components/titles/RefreshAnalysisButton';
 import { SaveToLibraryButton } from '@/components/screenings/SaveToLibraryButton';
 
 type Props = {
@@ -57,6 +58,17 @@ export default async function TitlePage({ params, searchParams }: Props) {
     .order('generated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Ask the database if a refresh is allowed right now. This honours
+  // the cooldown logic encoded in can_refresh_title, so any future
+  // policy changes there flow through automatically.
+  let canRefresh = false;
+  if (analysisRow) {
+    const { data: refreshAllowed } = await supabase.rpc('can_refresh_title', {
+      p_title_id: id,
+    });
+    canRefresh = refreshAllowed === true;
+  }
 
   // Fetch children (if any) for the fit verdict
   const { data: children } = await supabase
@@ -169,10 +181,12 @@ export default async function TitlePage({ params, searchParams }: Props) {
             sourceCount={analysisRow!.source_count}
             fit={fit}
             titleId={id}
+            titleName={title.title}
             selectedChildId={selectedChild?.id ?? null}
             selectedChildName={selectedChild?.name ?? null}
             childCount={children?.length ?? 0}
             existingScreeningId={existingScreeningId}
+            canRefresh={canRefresh}
           />
         ) : (
           <AnalysisStream titleId={id} titleName={title.title} />
@@ -189,10 +203,12 @@ function CachedAnalysisView({
   sourceCount,
   fit,
   titleId,
+  titleName,
   selectedChildId,
   selectedChildName,
   childCount,
   existingScreeningId,
+  canRefresh,
 }: {
   analysis: ReturnType<typeof rowToAnalysis>;
   generatedAt: string;
@@ -200,10 +216,12 @@ function CachedAnalysisView({
   sourceCount: number;
   fit: ReturnType<typeof computeFit> | null;
   titleId: string;
+  titleName: string;
   selectedChildId: string | null;
   selectedChildName: string | null;
   childCount: number;
   existingScreeningId: string | null;
+  canRefresh: boolean;
 }) {
   const generated = new Date(generatedAt);
   const now = new Date();
@@ -332,6 +350,13 @@ function CachedAnalysisView({
             />
           </div>
         )}
+
+        <RefreshAnalysisButton
+          titleId={titleId}
+          titleName={titleName}
+          generatedAt={generatedAt}
+          canRefresh={canRefresh}
+        />
 
         <Scorecard analysis={analysis} />
       </aside>

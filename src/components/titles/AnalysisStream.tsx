@@ -21,6 +21,11 @@ type Phase =
 type Props = {
   titleId: string;
   titleName: string;
+  /**
+   * If true, the API call includes ?refresh=1 which triggers cooldown
+   * checking and supersedes the existing analysis on success.
+   */
+  isRefresh?: boolean;
 };
 
 /**
@@ -32,7 +37,7 @@ type Props = {
  * On 'stored' it refreshes the page so the parent server component
  * picks up the cached row and renders the full analysis.
  */
-export function AnalysisStream({ titleId, titleName }: Props) {
+export function AnalysisStream({ titleId, titleName, isRefresh = false }: Props) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const startedRef = useRef(false);
@@ -60,7 +65,10 @@ export function AnalysisStream({ titleId, titleName }: Props) {
 
       let res: Response;
       try {
-        res = await fetch(`/api/titles/${titleId}/analyze`, {
+        const url = isRefresh
+          ? `/api/titles/${titleId}/analyze?refresh=1`
+          : `/api/titles/${titleId}/analyze`;
+        res = await fetch(url, {
           method: 'POST',
           signal: abortController.signal,
         });
@@ -158,7 +166,7 @@ export function AnalysisStream({ titleId, titleName }: Props) {
       clearTimeout(timeoutId);
       abortController.abort();
     };
-  }, [titleId, router]);
+  }, [titleId, router, isRefresh]);
 
   return (
     <div className="border border-rule rounded-sm bg-paper-raised p-10 max-w-2xl">
