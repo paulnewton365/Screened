@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { signOut } from '@/lib/auth/actions';
+import { TitleSearchBar } from '@/components/search/TitleSearchBar';
 
 /**
  * Dashboard — the parent's home base after sign-in.
@@ -112,7 +113,7 @@ type ChildSummary = {
 function ChildLibraryView({ childrenList }: { childrenList: ChildSummary[] }) {
   return (
     <>
-      <div className="flex items-end justify-between mb-12 gap-6 flex-wrap">
+      <div className="flex items-end justify-between mb-8 gap-6 flex-wrap">
         <div>
           <p className="editorial-meta uppercase mb-2">Your library</p>
           <h1>
@@ -127,6 +128,13 @@ function ChildLibraryView({ childrenList }: { childrenList: ChildSummary[] }) {
         >
           Add another child
         </Link>
+      </div>
+
+      <div className="mb-12">
+        <TitleSearchBar placeholder="Search a film or show…" />
+        <p className="mt-2 text-xs text-ink-subtle">
+          Find a title to see how parents read it and whether it fits your child.
+        </p>
       </div>
 
       <div className="space-y-6">
@@ -173,13 +181,9 @@ function ChildCard({ child }: { child: ChildSummary }) {
           Nothing screened yet.
         </p>
         <p className="text-sm text-ink-subtle leading-relaxed max-w-md mx-auto">
-          Search a title to see how it scores against parent feedback and
-          how it might fit {child.name}.
+          Use the search above to find a title and see how it might fit{' '}
+          {child.name}.
         </p>
-
-        <div className="mt-6 inline-block px-5 py-2 bg-paper-sunken text-ink-subtle rounded-sm text-sm">
-          Title search coming next
-        </div>
       </div>
     </article>
   );
