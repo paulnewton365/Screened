@@ -11,12 +11,21 @@ import {
   StatusFilter,
   type LibraryStatus,
 } from '@/components/screenings/StatusFilter';
+import {
+  DashboardFilters,
+  type SortKey,
+  type TypeFilter,
+} from '@/components/screenings/DashboardFilters';
 import { ChildPicker } from '@/components/titles/ChildPicker';
+import { fetchLikedTitleIds } from '@/lib/likes/queries';
 
 type Props = {
   searchParams: Promise<{
     child?: string;
     status?: string;
+    type?: string;
+    liked?: string;
+    sort?: string;
   }>;
 };
 
@@ -73,6 +82,25 @@ export default async function DashboardPage({ searchParams }: Props) {
   const status: LibraryStatus =
     sp.status === 'reviewed' || sp.status === 'searched' ? sp.status : 'all';
 
+  // Type filter
+  const typeFilter: TypeFilter =
+    sp.type === 'movie' || sp.type === 'tv' ? sp.type : 'all';
+
+  // Liked-only toggle
+  const likedOnly = sp.liked === 'true';
+
+  // Sort
+  const sort: SortKey =
+    sp.sort === 'stim_low' ||
+    sp.sort === 'fright_low' ||
+    sp.sort === 'violence_low' ||
+    sp.sort === 'age_low'
+      ? sp.sort
+      : 'recent';
+
+  // Fetch the user's liked title ids
+  const likedTitleIds = await fetchLikedTitleIds(supabase, user.id);
+
   // Fetch screenings for the selected child + joined title + analysis scores.
   const { data: screeningsRaw } = await supabase
     .from('screenings')
@@ -92,7 +120,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     .eq('child_id', selectedChild.id)
     .order('created_at', { ascending: false });
 
-  const allScreenings: ScreeningCardData[] = (screeningsRaw ?? [])
+  const allScreeningsUnfiltered: ScreeningCardData[] = (screeningsRaw ?? [])
     .map((row) => {
       const titleObj = Array.isArray(row.titles) ? row.titles[0] : row.titles;
       if (!titleObj) return null;
@@ -115,6 +143,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         created_at: row.created_at as string,
         parent_notes: row.parent_notes as string | null,
         would_rewatch: row.would_rewatch as boolean | null,
+        liked: likedTitleIds.has(row.title_id as string),
         observations: {
           engagement_quality: row.engagement_quality as number | null,
           emotional_resonance: row.emotional_resonance as number | null,
@@ -141,6 +170,33 @@ export default async function DashboardPage({ searchParams }: Props) {
       };
     })
     .filter((s): s is ScreeningCardData => s !== null);
+
+  // Apply type & liked filters
+  const allScreenings = allScreeningsUnfiltered
+    .filter((s) => typeFilter === 'all' || s.type === typeFilter)
+    .filter((s) => !likedOnly || s.liked);
+
+  // Apply sort. For the score-based sorts, items missing that score
+  // sink to the bottom so they don't pollute the top of the list.
+  if (sort !== 'recent') {
+    const scoreKey: keyof NonNullable<ScreeningCardData['analysisScores']> = (
+      {
+        stim_low: 'stimulation_intensity',
+        fright_low: 'frightening_content',
+        violence_low: 'violence_level',
+        age_low: 'age_recommendation_min',
+      } as const
+    )[sort];
+
+    allScreenings.sort((a, b) => {
+      const va = a.analysisScores?.[scoreKey] ?? null;
+      const vb = b.analysisScores?.[scoreKey] ?? null;
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      return va - vb;
+    });
+  }
 
   const reviewed = allScreenings.filter((s) => s.watched_at);
   const searched = allScreenings.filter((s) => !s.watched_at);
@@ -219,7 +275,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
 
         {allScreenings.length > 0 && (
-          <div className="mb-8">
+          <div className="mb-4">
             <StatusFilter
               basePath="/dashboard"
               preserveParams={
@@ -231,12 +287,35 @@ export default async function DashboardPage({ searchParams }: Props) {
           </div>
         )}
 
-        {allScreenings.length === 0 ? (
+        {(allScreeningsUnfiltered.length > 0) && (
+          <div className="mb-8">
+            <DashboardFilters
+              basePath="/dashboard"
+              preserveParams={{
+                child: children.length > 1 ? selectedChild.id : undefined,
+                status: status === 'all' ? undefined : status,
+              }}
+              type={typeFilter}
+              likedOnly={likedOnly}
+              sort={sort}
+            />
+          </div>
+        )}
+
+        {allScreeningsUnfiltered.length === 0 ? (
           <div className="border border-rule rounded-sm bg-paper-raised p-12 text-center">
             <p className="editorial-meta uppercase mb-3">Nothing saved yet</p>
             <p className="text-ink-muted leading-relaxed max-w-md mx-auto">
               Search a title above to see how it might fit{' '}
               {selectedChild.name}, then save it to come back to.
+            </p>
+          </div>
+        ) : allScreenings.length === 0 ? (
+          <div className="border border-rule rounded-sm bg-paper-raised p-10 text-center">
+            <p className="editorial-meta uppercase mb-3">No matches</p>
+            <p className="text-ink-muted leading-relaxed max-w-md mx-auto">
+              Nothing in {selectedChild.name}&rsquo;s library matches the
+              current filters. Try clearing one above.
             </p>
           </div>
         ) : (

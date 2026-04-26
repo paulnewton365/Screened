@@ -26,6 +26,7 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
+  const querySecret = request.nextUrl.searchParams.get('secret');
   const expected = process.env.CRON_SECRET;
 
   if (!expected) {
@@ -35,7 +36,13 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (authHeader !== `Bearer ${expected}`) {
+  // Accept either:
+  //   - Authorization: Bearer <secret>  (used by Vercel Cron)
+  //   - ?secret=<secret> query param    (browser-friendly manual trigger)
+  const isAuthorized =
+    authHeader === `Bearer ${expected}` || querySecret === expected;
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

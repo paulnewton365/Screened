@@ -13,6 +13,8 @@ import { RefreshAnalysisButton } from '@/components/titles/RefreshAnalysisButton
 import { ChildPicker } from '@/components/titles/ChildPicker';
 import { CommunityObservations } from '@/components/titles/CommunityObservations';
 import { SaveToLibraryButton } from '@/components/screenings/SaveToLibraryButton';
+import { LikeHeart } from '@/components/likes/LikeHeart';
+import { isTitleLiked } from '@/lib/likes/queries';
 import { ageBandFromBirthDate, sensitivityBand } from '@/lib/community/bands';
 import { communityObservationSchema } from '@/lib/community/schemas';
 
@@ -98,6 +100,9 @@ export default async function TitlePage({ params, searchParams }: Props) {
       .maybeSingle();
     existingScreeningId = existing?.id ?? null;
   }
+
+  // Has the parent liked this title?
+  const liked = await isTitleLiked(supabase, user.id, id);
 
   const analysis = analysisRow ? rowToAnalysis(analysisRow as TitleAnalysisRow) : null;
 
@@ -232,6 +237,7 @@ export default async function TitlePage({ params, searchParams }: Props) {
             existingScreeningId={existingScreeningId}
             canRefresh={canRefresh}
             communityObservation={communityObservation}
+            liked={liked}
           />
         ) : (
           <AnalysisStream titleId={id} titleName={title.title} />
@@ -256,6 +262,7 @@ function CachedAnalysisView({
   existingScreeningId,
   canRefresh,
   communityObservation,
+  liked,
 }: {
   analysis: ReturnType<typeof rowToAnalysis>;
   generatedAt: string;
@@ -275,6 +282,7 @@ function CachedAnalysisView({
     ageBand: import('@/lib/community/bands').AgeBand;
     sensitivityBand: import('@/lib/community/bands').SensitivityBand;
   } | null;
+  liked: boolean;
 }) {
   const generated = new Date(generatedAt);
   const now = new Date();
@@ -389,6 +397,18 @@ function CachedAnalysisView({
           childOptions={childOptions}
           selectedChildId={selectedChildId}
         />
+
+        <div className="border border-rule rounded-sm bg-paper-raised p-6 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="editorial-meta uppercase mb-1">Your take</p>
+            <p className="text-sm text-ink leading-snug">
+              {liked
+                ? 'You like this one.'
+                : 'A film or show you like? Tap the heart.'}
+            </p>
+          </div>
+          <LikeHeart titleId={titleId} initialLiked={liked} size="md" />
+        </div>
 
         {fit && selectedChildName ? (
           <FitVerdictCard fit={fit} childName={selectedChildName} />
