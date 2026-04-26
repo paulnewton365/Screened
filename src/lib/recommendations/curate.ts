@@ -129,9 +129,28 @@ async function findBestTmdbMatch(
   const results = await searchTitles(query);
   if (results.length === 0) return null;
 
-  // Filter by type first
+  // Filter by type first (movie vs tv).
   const typeMatches = results.filter((r) => r.type === curated.type);
-  const candidates = typeMatches.length > 0 ? typeMatches : results;
+  let candidates = typeMatches.length > 0 ? typeMatches : results;
+
+  // CRITICAL: filter to results whose title actually resembles what the
+  // curator asked for. Without this we'd happily return whatever 2013
+  // movie TMDB happened to surface first when asked for "Frozen 2013".
+  candidates = candidates.filter((r) =>
+    titlesLooselyMatch(curated.title, r.title),
+  );
+  if (candidates.length === 0) return null;
+
+  // Quality backstop: avoid junk titles. vote_count of 100+ means enough
+  // people have rated it for the average to be meaningful; vote_average
+  // of 5.5+ is a generous floor that catches disasters (e.g. low-budget
+  // direct-to-video films that average around 2-3) without being
+  // unfair to popular kids' shows that adult voters underrate.
+  const qualityFiltered = candidates.filter(
+    (r) => r.vote_count >= 100 && r.vote_average >= 5.5,
+  );
+  if (qualityFiltered.length === 0) return null;
+  candidates = qualityFiltered;
 
   // Prefer matches with the right year. If the curator gave us a year
   // and a candidate matches it, that's a strong signal.
@@ -148,6 +167,51 @@ async function findBestTmdbMatch(
     if (offByOne) return offByOne;
   }
 
-  // Fall back to the most popular match — TMDB orders by popularity
+  // Fall back to the most popular surviving candidate.
   return candidates[0];
+}
+
+/**
+ * Loose title match. Accepts:
+ *   - Exact match after normalisation (lowercased, punctuation stripped, articles dropped)
+ *   - Substring match (handles "Toy Story" vs "Toy Story 2")
+ *   - 50%+ token overlap (handles minor wording differences)
+ *
+ * Rejects clearly different titles like "Frozen" vs "100 Degrees Below Zero".
+ */
+function titlesLooselyMatch(curated: string, found: string): boolean {
+  const a = stripArticles(normalizeTitle(curated));
+  const b = stripArticles(normalizeTitle(found));
+  if (!a || !b) return false;
+
+  if (a === b) return true;
+
+  // Substring match (one is contained in the other) — only when the
+  // shorter side is at least 4 chars to avoid false positives like
+  // "ai" matching "Wall-E".
+  if (a.length >= 4 && b.includes(a)) return true;
+  if (b.length >= 4 && a.includes(b)) return true;
+
+  // Token overlap. Filters out single-character noise tokens.
+  const ta = a.split(/\s+/).filter((t) => t.length > 1);
+  const tb = b.split(/\s+/).filter((t) => t.length > 1);
+  if (ta.length === 0 || tb.length === 0) return false;
+
+  const setA = new Set(ta);
+  const setB = new Set(tb);
+  const overlap = [...setA].filter((t) => setB.has(t)).length;
+  const minSize = Math.min(setA.size, setB.size);
+  return overlap / minSize >= 0.5;
+}
+
+function normalizeTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stripArticles(s: string): string {
+  return s.replace(/^(the|a|an)\s+/i, '');
 }
