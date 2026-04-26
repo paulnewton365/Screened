@@ -50,6 +50,8 @@ export type TmdbSearchResult = {
   poster_url: string | null;
   overview: string;
   popularity: number;
+  vote_average: number; // 0-10 scale, TMDB user ratings
+  vote_count: number;
 };
 
 type TmdbMultiResponse = {
@@ -65,6 +67,8 @@ type TmdbMultiResponse = {
     poster_path?: string | null;
     overview?: string;
     popularity?: number;
+    vote_average?: number;
+    vote_count?: number;
   }>;
 };
 
@@ -106,6 +110,8 @@ export async function searchTitles(query: string): Promise<TmdbSearchResult[]> {
           : null,
         overview: r.overview ?? '',
         popularity: r.popularity ?? 0,
+        vote_average: r.vote_average ?? 0,
+        vote_count: r.vote_count ?? 0,
       };
     })
     .slice(0, 8); // Cap to 8 most relevant results
