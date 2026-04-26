@@ -41,19 +41,25 @@ export default async function DashboardPage() {
           <Link href="/dashboard" className="font-serif text-xl tracking-tight">
             Screened
           </Link>
-          <div className="flex items-center gap-6">
+          <nav className="flex items-center gap-6 text-sm">
+            <Link
+              href="/"
+              className="text-ink-muted hover:text-ink transition-colors"
+            >
+              Home
+            </Link>
             <span className="editorial-meta hidden sm:inline">
               {profile?.display_name ?? user.email}
             </span>
             <form action={signOut}>
               <button
                 type="submit"
-                className="text-sm text-ink-muted hover:text-ink transition-colors"
+                className="text-ink-muted hover:text-ink transition-colors"
               >
                 Sign out
               </button>
             </form>
-          </div>
+          </nav>
         </div>
       </header>
 

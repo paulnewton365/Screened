@@ -1,9 +1,25 @@
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+import { signOut } from '@/lib/auth/actions';
 
-export default function LandingPage() {
+/**
+ * Landing page. Visible to both signed-out and signed-in users.
+ *
+ * For signed-out users it functions as the marketing page — sign-up CTAs.
+ * For signed-in users it remains a content page they can return to from
+ * the dashboard, but the nav and CTA shift to point them back into the
+ * app rather than asking them to sign up again.
+ */
+export default async function LandingPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isSignedIn = Boolean(user);
+
   return (
     <main className="flex-1 flex flex-col">
-      {/* Wordmark / nav */}
+      {/* Wordmark / nav — adapts based on auth state */}
       <header className="border-b border-rule">
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
           <Link
@@ -12,20 +28,40 @@ export default function LandingPage() {
           >
             Screened
           </Link>
-          <nav className="flex items-center gap-6 text-sm">
-            <Link
-              href="/login"
-              className="text-ink-muted hover:text-ink transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="text-ink hover:text-accent transition-colors"
-            >
-              Get started
-            </Link>
-          </nav>
+
+          {isSignedIn ? (
+            <nav className="flex items-center gap-6 text-sm">
+              <Link
+                href="/dashboard"
+                className="text-ink hover:text-accent transition-colors"
+              >
+                Dashboard
+              </Link>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="text-ink-muted hover:text-ink transition-colors"
+                >
+                  Sign out
+                </button>
+              </form>
+            </nav>
+          ) : (
+            <nav className="flex items-center gap-6 text-sm">
+              <Link
+                href="/login"
+                className="text-ink-muted hover:text-ink transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="text-ink hover:text-accent transition-colors"
+              >
+                Get started
+              </Link>
+            </nav>
+          )}
         </div>
       </header>
 
@@ -43,19 +79,35 @@ export default function LandingPage() {
           so you can decide what fits your child today.
         </p>
 
-        <div className="flex items-center gap-4">
-          <Link
-            href="/signup"
-            className="inline-block px-6 py-3 bg-ink text-paper rounded-sm hover:bg-accent transition-colors text-sm tracking-wide"
-          >
-            Set up your first child
-          </Link>
-          <Link
-            href="/login"
-            className="text-ink-muted hover:text-ink transition-colors text-sm"
-          >
-            I have an account
-          </Link>
+        <div className="flex items-center gap-4 flex-wrap">
+          {isSignedIn ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="inline-block px-6 py-3 bg-ink text-paper rounded-sm hover:bg-accent transition-colors text-sm tracking-wide"
+              >
+                Go to your dashboard
+              </Link>
+              <span className="text-ink-muted text-sm">
+                Welcome back.
+              </span>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/signup"
+                className="inline-block px-6 py-3 bg-ink text-paper rounded-sm hover:bg-accent transition-colors text-sm tracking-wide"
+              >
+                Set up your first child
+              </Link>
+              <Link
+                href="/login"
+                className="text-ink-muted hover:text-ink transition-colors text-sm"
+              >
+                I have an account
+              </Link>
+            </>
+          )}
         </div>
       </section>
 
