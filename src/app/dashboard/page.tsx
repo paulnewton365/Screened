@@ -45,7 +45,13 @@ export default async function DashboardPage() {
           `
           id, child_id, title_id, fit_verdict, fit_headline, overall_score,
           watched_at, created_at,
-          titles(id, title, release_year, type, poster_url)
+          titles(id, title, release_year, type, poster_url),
+          title_analyses!analysis_id(
+            stimulation_intensity,
+            frightening_content,
+            violence_level,
+            age_recommendation_min
+          )
         `,
         )
         .order('created_at', { ascending: false })
@@ -56,6 +62,9 @@ export default async function DashboardPage() {
   for (const row of screeningsData ?? []) {
     const titleObj = Array.isArray(row.titles) ? row.titles[0] : row.titles;
     if (!titleObj) continue;
+    const analysisObj = Array.isArray(row.title_analyses)
+      ? row.title_analyses[0]
+      : row.title_analyses;
     const screening: ChildScreening = {
       id: row.id as string,
       title_id: row.title_id as string,
@@ -69,6 +78,18 @@ export default async function DashboardPage() {
       release_year: (titleObj as { release_year: number | null }).release_year,
       type: (titleObj as { type: 'movie' | 'tv' }).type,
       poster_url: (titleObj as { poster_url: string | null }).poster_url,
+      stimulation_intensity:
+        (analysisObj as { stimulation_intensity?: number | null } | null)
+          ?.stimulation_intensity ?? null,
+      frightening_content:
+        (analysisObj as { frightening_content?: number | null } | null)
+          ?.frightening_content ?? null,
+      violence_level:
+        (analysisObj as { violence_level?: number | null } | null)
+          ?.violence_level ?? null,
+      age_recommendation_min:
+        (analysisObj as { age_recommendation_min?: number | null } | null)
+          ?.age_recommendation_min ?? null,
     };
     const list = screeningsByChild.get(screening.child_id) ?? [];
     list.push(screening);
@@ -166,6 +187,10 @@ type ChildScreening = {
   release_year: number | null;
   type: 'movie' | 'tv';
   poster_url: string | null;
+  stimulation_intensity: number | null;
+  frightening_content: number | null;
+  violence_level: number | null;
+  age_recommendation_min: number | null;
 };
 
 function ChildLibraryView({
@@ -328,6 +353,9 @@ function ChildCard({
                         )}
                       </p>
                     )}
+                    {!s.watched_at && hasAnyScores(s) && (
+                      <ScoreSnippet screening={s} />
+                    )}
                   </div>
                   {s.overall_score !== null && (
                     <span className="font-mono tabular-nums text-sm text-ink-muted flex-shrink-0">
@@ -356,4 +384,65 @@ function computeAge(birthDate: string): number {
     age--;
   }
   return Math.max(0, age);
+}
+
+function hasAnyScores(s: ChildScreening): boolean {
+  return (
+    s.stimulation_intensity !== null ||
+    s.frightening_content !== null ||
+    s.violence_level !== null ||
+    s.age_recommendation_min !== null
+  );
+}
+
+/**
+ * Compact score row shown under unwatched (searched) items in the
+ * dashboard library. Surfaces the three most decision-relevant scores
+ * for "what should we watch tonight" — stimulation, frightening, and
+ * minimum age recommendation. Plus violence as the fourth in cases
+ * where it's notable.
+ */
+function ScoreSnippet({ screening: s }: { screening: ChildScreening }) {
+  return (
+    <div className="mt-1.5 flex items-center gap-x-4 gap-y-1 flex-wrap text-[11px] uppercase tracking-wider text-ink-subtle">
+      {s.stimulation_intensity !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span>Stim</span>
+          <Dots value={s.stimulation_intensity} />
+        </span>
+      )}
+      {s.frightening_content !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span>Fright</span>
+          <Dots value={s.frightening_content} />
+        </span>
+      )}
+      {s.violence_level !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span>Violence</span>
+          <Dots value={s.violence_level} />
+        </span>
+      )}
+      {s.age_recommendation_min !== null && (
+        <span>Age {s.age_recommendation_min}+</span>
+      )}
+    </div>
+  );
+}
+
+function Dots({ value }: { value: number }) {
+  return (
+    <span aria-label={`${value} out of 5`} className="inline-flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span
+          key={n}
+          aria-hidden="true"
+          className={[
+            'inline-block w-1 h-1 rounded-full',
+            n <= value ? 'bg-ink' : 'bg-rule',
+          ].join(' ')}
+        />
+      ))}
+    </span>
+  );
 }
