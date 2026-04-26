@@ -158,37 +158,23 @@ export default async function ChildLibraryPage({ params }: Props) {
         ) : (
           <div className="space-y-12">
             {watched.length > 0 && (
-              <section className="space-y-6">
-                <header>
-                  <p className="editorial-meta uppercase">Watched</p>
-                  <h2 className="mt-1">
-                    {watched.length}{' '}
-                    {watched.length === 1 ? 'title' : 'titles'} screened.
-                  </h2>
-                </header>
-                <div className="space-y-4">
-                  {watched.map((s) => (
-                    <ScreeningCard key={s.id} screening={s} />
-                  ))}
-                </div>
-              </section>
+              <LibrarySection
+                label="Reviewed"
+                headline={`${watched.length} ${
+                  watched.length === 1 ? 'title' : 'titles'
+                } reviewed.`}
+                screenings={watched}
+              />
             )}
 
             {toWatch.length > 0 && (
-              <section className="space-y-6">
-                <header>
-                  <p className="editorial-meta uppercase">Saved to watch</p>
-                  <h2 className="mt-1">
-                    {toWatch.length}{' '}
-                    {toWatch.length === 1 ? 'title' : 'titles'} on the shelf.
-                  </h2>
-                </header>
-                <div className="space-y-4">
-                  {toWatch.map((s) => (
-                    <ScreeningCard key={s.id} screening={s} />
-                  ))}
-                </div>
-              </section>
+              <LibrarySection
+                label="Searched"
+                headline={`${toWatch.length} ${
+                  toWatch.length === 1 ? 'title' : 'titles'
+                } searched.`}
+                screenings={toWatch}
+              />
             )}
           </div>
         )}
@@ -209,4 +195,66 @@ function computeAge(birthDate: string): number {
     age--;
   }
   return Math.max(0, age);
+}
+
+/**
+ * A top-level library section (Reviewed or Searched), with screenings
+ * grouped by type into Films and TV shows sub-headers.
+ *
+ * If only one type is present, the sub-header is suppressed — no need
+ * to declare "Films" if the entire section is films. The mixed case is
+ * where the distinction matters.
+ */
+function LibrarySection({
+  label,
+  headline,
+  screenings,
+}: {
+  label: string;
+  headline: string;
+  screenings: ScreeningCardData[];
+}) {
+  const films = screenings.filter((s) => s.type === 'movie');
+  const tvShows = screenings.filter((s) => s.type === 'tv');
+  const showSubHeaders = films.length > 0 && tvShows.length > 0;
+
+  return (
+    <section className="space-y-6">
+      <header>
+        <p className="editorial-meta uppercase">{label}</p>
+        <h2 className="mt-1">{headline}</h2>
+      </header>
+
+      {showSubHeaders ? (
+        <div className="space-y-10">
+          {films.length > 0 && (
+            <div className="space-y-4">
+              <p className="editorial-meta uppercase pt-2 border-t border-rule">
+                Films · {films.length}
+              </p>
+              {films.map((s) => (
+                <ScreeningCard key={s.id} screening={s} />
+              ))}
+            </div>
+          )}
+          {tvShows.length > 0 && (
+            <div className="space-y-4">
+              <p className="editorial-meta uppercase pt-2 border-t border-rule">
+                TV shows · {tvShows.length}
+              </p>
+              {tvShows.map((s) => (
+                <ScreeningCard key={s.id} screening={s} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {screenings.map((s) => (
+            <ScreeningCard key={s.id} screening={s} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
