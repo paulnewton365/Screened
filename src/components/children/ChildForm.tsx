@@ -2,7 +2,11 @@
 
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { createChild, type ChildFormState } from '@/lib/children/actions';
+import {
+  createChild,
+  updateChild,
+  type ChildFormState,
+} from '@/lib/children/actions';
 import {
   INTEREST_OPTIONS,
   SENSITIVITY_ANCHORS,
@@ -14,18 +18,47 @@ import { ChipSelector } from './ChipSelector';
 const initialState: ChildFormState = {};
 
 /**
- * The full child onboarding form, presented as one page with three
- * sections: basics, sensitivity, personality.
- *
- * Multi-page wizard would feel more "official" but parents would resent
- * the click-through. A single page, generously spaced, reads like a
- * thoughtful magazine questionnaire — which is the register we want.
+ * The values used to pre-populate the form when editing.
+ * Closely mirrors the database row shape but flattened.
  */
-export function ChildForm() {
-  const [state, formAction] = useActionState(createChild, initialState);
+export type ChildFormDefaults = {
+  id: string;
+  name: string;
+  birth_date: string | null;
+  fear_sensitivity: number | null;
+  stimulation_sensitivity: number | null;
+  emotional_sensitivity: number | null;
+  energy_level: number | null;
+  attention_span: number | null;
+  interests: string[] | null;
+  current_themes: string[] | null;
+  notes: string | null;
+};
+
+type Props = {
+  /** Pass the existing child to switch the form into edit mode. */
+  defaults?: ChildFormDefaults;
+  /** Custom label for the submit button. Defaults vary by mode. */
+  submitLabel?: string;
+};
+
+export function ChildForm({ defaults, submitLabel }: Props) {
+  const isEdit = Boolean(defaults);
+  const action = isEdit ? updateChild : createChild;
+  const [state, formAction] = useActionState(action, initialState);
+
+  const buttonLabel = submitLabel ?? (isEdit ? 'Save changes' : 'Save profile');
+
+  // current_themes is stored as text[] in the database (a single-element
+  // array, since the form field is one textarea). Flatten it for display.
+  const currentThemesValue = defaults?.current_themes?.[0] ?? '';
 
   return (
     <form action={formAction} className="space-y-16">
+      {isEdit && defaults && (
+        <input type="hidden" name="id" value={defaults.id} />
+      )}
+
       {state.formError && (
         <div
           role="alert"
@@ -60,16 +93,14 @@ export function ChildForm() {
               type="text"
               required
               autoComplete="off"
-              autoFocus
+              autoFocus={!isEdit}
               maxLength={50}
+              defaultValue={defaults?.name ?? ''}
               placeholder="e.g. Maya, or Bug"
               className="w-full px-4 py-3 bg-paper-raised border border-rule rounded-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
             />
             {state.errors?.name && (
-              <p
-                role="alert"
-                className="mt-2 text-sm text-notice"
-              >
+              <p role="alert" className="mt-2 text-sm text-notice">
                 {state.errors.name}
               </p>
             )}
@@ -87,6 +118,7 @@ export function ChildForm() {
               id="birth_date"
               name="birth_date"
               type="date"
+              defaultValue={defaults?.birth_date ?? ''}
               className="w-full px-4 py-3 bg-paper-raised border border-rule rounded-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors"
             />
             <p className="mt-2 text-xs text-ink-subtle leading-relaxed">
@@ -123,6 +155,7 @@ export function ChildForm() {
           low={SENSITIVITY_ANCHORS.fear.low}
           mid={SENSITIVITY_ANCHORS.fear.mid}
           high={SENSITIVITY_ANCHORS.fear.high}
+          defaultValue={defaults?.fear_sensitivity}
         />
 
         <ScalePicker
@@ -132,6 +165,7 @@ export function ChildForm() {
           low={SENSITIVITY_ANCHORS.stimulation.low}
           mid={SENSITIVITY_ANCHORS.stimulation.mid}
           high={SENSITIVITY_ANCHORS.stimulation.high}
+          defaultValue={defaults?.stimulation_sensitivity}
         />
 
         <ScalePicker
@@ -141,6 +175,7 @@ export function ChildForm() {
           low={SENSITIVITY_ANCHORS.emotional.low}
           mid={SENSITIVITY_ANCHORS.emotional.mid}
           high={SENSITIVITY_ANCHORS.emotional.high}
+          defaultValue={defaults?.emotional_sensitivity}
         />
       </section>
 
@@ -164,6 +199,7 @@ export function ChildForm() {
           low={PERSONALITY_ANCHORS.energy.low}
           mid={PERSONALITY_ANCHORS.energy.mid}
           high={PERSONALITY_ANCHORS.energy.high}
+          defaultValue={defaults?.energy_level}
           optional
         />
 
@@ -174,6 +210,7 @@ export function ChildForm() {
           low={PERSONALITY_ANCHORS.attention.low}
           mid={PERSONALITY_ANCHORS.attention.mid}
           high={PERSONALITY_ANCHORS.attention.high}
+          defaultValue={defaults?.attention_span}
           optional
         />
 
@@ -185,7 +222,11 @@ export function ChildForm() {
           <p className="text-ink-muted text-sm mt-0 mb-4 leading-relaxed">
             What lights them up? Pick any that apply.
           </p>
-          <ChipSelector name="interests" options={INTEREST_OPTIONS} />
+          <ChipSelector
+            name="interests"
+            options={INTEREST_OPTIONS}
+            defaultSelected={defaults?.interests ?? []}
+          />
         </div>
 
         <div className="max-w-prose">
@@ -205,6 +246,7 @@ export function ChildForm() {
             name="current_themes"
             rows={3}
             maxLength={500}
+            defaultValue={currentThemesValue}
             className="w-full px-4 py-3 bg-paper-raised border border-rule rounded-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors leading-relaxed"
           />
         </div>
@@ -225,6 +267,7 @@ export function ChildForm() {
             name="notes"
             rows={3}
             maxLength={1000}
+            defaultValue={defaults?.notes ?? ''}
             className="w-full px-4 py-3 bg-paper-raised border border-rule rounded-sm text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-colors leading-relaxed"
           />
         </div>
@@ -233,17 +276,19 @@ export function ChildForm() {
       <hr className="editorial-rule" />
 
       {/* Submit */}
-      <div className="flex items-center gap-4 pt-2">
-        <SubmitButton />
+      <div className="flex items-center gap-4 pt-2 flex-wrap">
+        <SubmitButton label={buttonLabel} />
         <p className="text-sm text-ink-subtle">
-          You can edit any of this later.
+          {isEdit
+            ? 'Changes save immediately.'
+            : 'You can edit any of this later.'}
         </p>
       </div>
     </form>
   );
 }
 
-function SubmitButton() {
+function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
 
   return (
@@ -252,7 +297,7 @@ function SubmitButton() {
       disabled={pending}
       className="px-7 py-3 bg-ink text-paper rounded-sm hover:bg-accent transition-colors text-sm tracking-wide disabled:opacity-60 disabled:cursor-not-allowed"
     >
-      {pending ? 'Saving…' : 'Save profile'}
+      {pending ? 'Saving…' : label}
     </button>
   );
 }

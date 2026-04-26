@@ -14,8 +14,12 @@ type Props = {
   low: string;
   mid: string;
   high: string;
-  /** Default value, defaults to 3 (the mid-point). */
-  defaultValue?: number;
+  /**
+   * Initial selected value. For required pickers, defaults to 3 (the
+   * mid-point). For optional pickers, pass null/undefined to start
+   * with no selection.
+   */
+  defaultValue?: number | null;
   /** Whether this picker is required (renders a small "(optional)" tag if false). */
   optional?: boolean;
 };
@@ -39,11 +43,15 @@ export function ScalePicker({
   low,
   mid,
   high,
-  defaultValue = 3,
+  defaultValue,
   optional = false,
 }: Props) {
   const groupId = useId();
-  const [value, setValue] = useState<number>(defaultValue);
+  // For required pickers (optional=false), default to 3.
+  // For optional pickers, leave unselected unless a value is passed in.
+  const initial =
+    defaultValue ?? (optional ? null : 3);
+  const [value, setValue] = useState<number | null>(initial);
 
   return (
     <fieldset className="border-0 p-0">

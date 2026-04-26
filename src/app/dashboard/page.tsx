@@ -138,13 +138,21 @@ function ChildCard({ child }: { child: ChildSummary }) {
   return (
     <article className="border border-rule rounded-sm bg-paper-raised">
       <header className="px-8 pt-8 pb-6 border-b border-rule">
-        <div className="flex items-baseline gap-4 flex-wrap">
-          <h2 className="m-0">{child.name}</h2>
-          {age !== null && (
-            <span className="editorial-meta">
-              {age === 0 ? 'under 1' : `age ${age}`}
-            </span>
-          )}
+        <div className="flex items-baseline gap-4 flex-wrap justify-between">
+          <div className="flex items-baseline gap-4 flex-wrap">
+            <h2 className="m-0">{child.name}</h2>
+            {age !== null && (
+              <span className="editorial-meta">
+                {age === 0 ? 'under 1' : `age ${age}`}
+              </span>
+            )}
+          </div>
+          <Link
+            href={`/children/${child.id}/edit`}
+            className="text-sm text-ink-muted hover:text-ink underline transition-colors"
+          >
+            Edit profile
+          </Link>
         </div>
         {child.interests && child.interests.length > 0 && (
           <p className="mt-3 text-sm text-ink-muted leading-relaxed">
