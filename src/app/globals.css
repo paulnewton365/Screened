@@ -1,0 +1,139 @@
+@import "tailwindcss";
+
+/*
+ * Screened — Editorial Design System
+ *
+ * Visual register: a parenting magazine feature, not a dashboard.
+ * Considered, literate, never alarmist. Typography does the heavy lifting;
+ * colour is restrained and used for meaning, not decoration.
+ *
+ * Core palette:
+ *   paper      — warm off-white background, like a printed page
+ *   ink        — primary text, near-black with a touch of warmth
+ *   ink-muted  — secondary text, captions, metadata
+ *   rule       — divider lines, table borders
+ *   accent     — single editorial accent, used sparingly
+ *
+ * The score for "violence: 5/5" should look exactly as visually loud as
+ * "educational value: 5/5". The app reports; the parent decides.
+ */
+
+@theme {
+  /* Surfaces */
+  --color-paper: #FAF7F2;
+  --color-paper-raised: #FFFFFF;
+  --color-paper-sunken: #F2EEE6;
+
+  /* Ink */
+  --color-ink: #1A1815;
+  --color-ink-muted: #5C574E;
+  --color-ink-subtle: #8B867B;
+
+  /* Structure */
+  --color-rule: #E5DFD3;
+  --color-rule-strong: #C9C2B2;
+
+  /* Single editorial accent — used for the wordmark, primary CTAs,
+     and active states. Restrained on purpose. */
+  --color-accent: #6B4226;
+  --color-accent-soft: #E8D9CA;
+
+  /* Semantic — used only for the certification block notice and
+     hard-rail indicators. NEVER used to colour scores. */
+  --color-notice: #8B6B3D;
+  --color-notice-soft: #F5EDDF;
+
+  /* Typography */
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+
+  /* Generous line-heights for editorial feel */
+  --leading-relaxed: 1.7;
+  --leading-loose: 1.9;
+}
+
+@layer base {
+  html {
+    font-feature-settings: "ss01", "cv01"; /* refined letterforms */
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  /* Editorial headline scale. Sentence case, never title case. */
+  h1, .editorial-h1 {
+    font-family: var(--font-serif);
+    font-size: 2.5rem;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    font-weight: 400;
+    color: var(--color-ink);
+  }
+
+  h2, .editorial-h2 {
+    font-family: var(--font-serif);
+    font-size: 1.75rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    font-weight: 400;
+    color: var(--color-ink);
+  }
+
+  h3, .editorial-h3 {
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 500;
+    color: var(--color-ink);
+  }
+
+  /* Body copy: generous line-height, comfortable measure */
+  p {
+    line-height: 1.7;
+  }
+}
+
+@layer components {
+  /* The high-level summary on a title page — set in serif, larger,
+     reads like the lede paragraph of a magazine feature. */
+  .editorial-lede {
+    font-family: var(--font-serif);
+    font-size: 1.25rem;
+    line-height: 1.55;
+    color: var(--color-ink);
+  }
+
+  /* Smaller editorial body — for theme summaries, etc. */
+  .editorial-body {
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    color: var(--color-ink);
+  }
+
+  /* Captions, metadata, certification labels */
+  .editorial-meta {
+    font-family: var(--font-sans);
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    color: var(--color-ink-muted);
+  }
+
+  /* Editorial rule — a hairline divider with optional whitespace */
+  .editorial-rule {
+    border-top: 1px solid var(--color-rule);
+  }
+
+  /* Pull-quote callout for theme summaries */
+  .editorial-pullquote {
+    font-family: var(--font-serif);
+    font-size: 1.125rem;
+    line-height: 1.5;
+    color: var(--color-ink);
+    border-left: 2px solid var(--color-rule-strong);
+    padding-left: 1.25rem;
+  }
+}
