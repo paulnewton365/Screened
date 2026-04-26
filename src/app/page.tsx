@@ -32,6 +32,12 @@ export default async function LandingPage() {
           {isSignedIn ? (
             <nav className="flex items-center gap-6 text-sm">
               <Link
+                href="/recommendations"
+                className="text-ink-muted hover:text-ink transition-colors"
+              >
+                Recommendations
+              </Link>
+              <Link
                 href="/dashboard"
                 className="text-ink hover:text-accent transition-colors"
               >
@@ -48,6 +54,12 @@ export default async function LandingPage() {
             </nav>
           ) : (
             <nav className="flex items-center gap-6 text-sm">
+              <Link
+                href="/recommendations"
+                className="text-ink-muted hover:text-ink transition-colors"
+              >
+                Recommendations
+              </Link>
               <Link
                 href="/login"
                 className="text-ink-muted hover:text-ink transition-colors"
@@ -142,6 +154,28 @@ export default async function LandingPage() {
               you and for every parent who searches the same title later.
             </p>
           </div>
+        </div>
+      </section>
+
+      {/* Recommendations CTA — pulls from the public discovery page */}
+      <section className="border-t border-rule bg-paper-sunken/40">
+        <div className="max-w-3xl mx-auto px-6 py-20">
+          <p className="editorial-meta uppercase mb-4">Where to start</p>
+          <h2 className="mb-6 text-4xl leading-[1.15] tracking-tight">
+            What parents recommend, by age.
+          </h2>
+          <p className="text-ink-muted leading-relaxed mb-8 max-w-2xl">
+            Five titles per age band, drawn from the parent-focused lists that
+            take this seriously — Common Sense Media, Rotten Tomatoes Family,
+            IMDb&rsquo;s Parents Guide, and the threads where parents actually
+            compare notes. Refreshed every month. No sign-in required.
+          </p>
+          <Link
+            href="/recommendations"
+            className="inline-block text-sm text-ink underline hover:text-accent transition-colors"
+          >
+            Browse recommendations →
+          </Link>
         </div>
       </section>
 

@@ -17,6 +17,7 @@ const PUBLIC_ROUTES = [
   '/signup',
   '/auth/callback',
   '/auth/verify',
+  '/recommendations',
 ];
 
 const AUTH_PAGES_FOR_LOGGED_OUT_ONLY = [
