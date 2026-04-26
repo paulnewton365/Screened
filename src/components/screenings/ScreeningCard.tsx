@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LikeHeart } from '@/components/likes/LikeHeart';
 
 const VERDICT_LABEL: Record<string, string> = {
   great_fit: 'Great fit',
@@ -31,6 +32,8 @@ export type ScreeningCardData = {
   created_at: string;
   parent_notes: string | null;
   would_rewatch: boolean | null;
+  /** Whether the current user has liked this title. */
+  liked: boolean;
   observations: {
     engagement_quality: number | null;
     emotional_resonance: number | null;
@@ -95,27 +98,36 @@ export function ScreeningCard({ screening: s }: Props) {
 
         {/* Body */}
         <div className="min-w-0 space-y-4">
-          <header>
-            <p className="editorial-meta uppercase mb-1">
-              {s.type === 'movie' ? 'Film' : 'TV show'}
-              {s.release_year && ` · ${s.release_year}`}
-            </p>
-            <h3 className="font-serif text-2xl mb-2 leading-tight">
-              <Link
-                href={`/titles/${s.title_id}?child=${s.child_id}`}
-                className="hover:text-accent transition-colors"
-              >
-                {s.title}
-              </Link>
-            </h3>
-            <p className="text-sm text-ink-muted">
-              {s.fit_verdict && (VERDICT_LABEL[s.fit_verdict] ?? s.fit_verdict)}
-              {s.overall_score !== null && (
-                <span className="text-ink-subtle">
-                  {' '}· {Math.round(s.overall_score)} / 100
-                </span>
-              )}
-            </p>
+          <header className="flex items-start gap-3 justify-between">
+            <div className="min-w-0">
+              <p className="editorial-meta uppercase mb-1">
+                {s.type === 'movie' ? 'Film' : 'TV show'}
+                {s.release_year && ` · ${s.release_year}`}
+              </p>
+              <h3 className="font-serif text-2xl mb-2 leading-tight">
+                <Link
+                  href={`/titles/${s.title_id}?child=${s.child_id}`}
+                  className="hover:text-accent transition-colors"
+                >
+                  {s.title}
+                </Link>
+              </h3>
+              <p className="text-sm text-ink-muted">
+                {s.fit_verdict && (VERDICT_LABEL[s.fit_verdict] ?? s.fit_verdict)}
+                {s.overall_score !== null && (
+                  <span className="text-ink-subtle">
+                    {' '}· {Math.round(s.overall_score)} / 100
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="-mt-1 -mr-1 shrink-0">
+              <LikeHeart
+                titleId={s.title_id}
+                initialLiked={s.liked}
+                size="sm"
+              />
+            </div>
           </header>
 
           {hasObservations ? (
