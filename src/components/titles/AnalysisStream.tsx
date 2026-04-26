@@ -43,6 +43,18 @@ export function AnalysisStream({ titleId, titleName }: Props) {
 
     const abortController = new AbortController();
 
+    // Safety net: if no events arrive after 3 minutes, surface an error.
+    // Normal analyses complete in 30-60 seconds; anything past 3 minutes
+    // means something is wrong upstream.
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+      setPhase({
+        kind: 'error',
+        message:
+          "The analysis is taking longer than expected — something may be stuck. Try again.",
+      });
+    }, 180_000);
+
     async function run() {
       setPhase({ kind: 'streaming', messages: [], queries: [] });
 
@@ -53,6 +65,7 @@ export function AnalysisStream({ titleId, titleName }: Props) {
           signal: abortController.signal,
         });
       } catch {
+        clearTimeout(timeoutId);
         setPhase({
           kind: 'error',
           message: "We couldn't reach the analysis service. Try again.",
@@ -61,6 +74,7 @@ export function AnalysisStream({ titleId, titleName }: Props) {
       }
 
       if (!res.ok || !res.body) {
+        clearTimeout(timeoutId);
         setPhase({
           kind: 'error',
           message: 'The analysis service is temporarily unavailable.',
@@ -115,10 +129,12 @@ export function AnalysisStream({ titleId, titleName }: Props) {
             });
 
             if (event.type === 'error') {
+              clearTimeout(timeoutId);
               setPhase({ kind: 'error', message: event.message });
               return;
             }
             if (event.type === 'stored') {
+              clearTimeout(timeoutId);
               setPhase({ kind: 'done' });
               router.refresh();
               return;
@@ -127,6 +143,7 @@ export function AnalysisStream({ titleId, titleName }: Props) {
         }
       } catch (err) {
         if (abortController.signal.aborted) return;
+        clearTimeout(timeoutId);
         console.error('Stream read failed:', err);
         setPhase({
           kind: 'error',
@@ -137,7 +154,10 @@ export function AnalysisStream({ titleId, titleName }: Props) {
 
     void run();
 
-    return () => abortController.abort();
+    return () => {
+      clearTimeout(timeoutId);
+      abortController.abort();
+    };
   }, [titleId, router]);
 
   return (

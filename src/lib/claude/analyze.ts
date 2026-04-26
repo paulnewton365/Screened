@@ -105,17 +105,10 @@ export async function* streamAnalysis(input: {
     }
 
     if (event.type === 'content_block_stop') {
-      // After a content block completes, inspect the final state.
-      // For tool uses, we can read the input now.
-      const finalEvent = await stream.finalMessage().catch(() => null);
-      if (finalEvent) {
-        // Capture submit_analysis input on the fly so we have it after stream ends.
-        for (const block of finalEvent.content) {
-          if (block.type === 'tool_use' && block.name === 'submit_analysis') {
-            pendingAnalysis = block.input;
-          }
-        }
-      }
+      // Note: do NOT call stream.finalMessage() here. That waits for
+      // the entire stream to complete, but we're inside the iteration
+      // that's producing it — classic deadlock. We pull the final
+      // message AFTER the for-await loop ends.
     }
   }
 

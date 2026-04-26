@@ -19,7 +19,7 @@ import { storeAnalysis } from '@/lib/claude/store';
  * for this iteration — typical analyses complete in 20-40 seconds.
  */
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(
   request: NextRequest,
