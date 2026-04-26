@@ -1,6 +1,21 @@
 import Link from 'next/link';
+import { AuthForm } from '@/components/auth/AuthForm';
 
-export default function LoginPage() {
+type Props = {
+  searchParams: Promise<{ error?: string }>;
+};
+
+const ERROR_MESSAGES: Record<string, string> = {
+  auth_failed:
+    'That sign-in link didn\'t work. It may have expired or already been used. Send yourself a fresh one below.',
+  missing_code:
+    'That link looks incomplete. Send yourself a fresh one below.',
+};
+
+export default async function LoginPage({ searchParams }: Props) {
+  const { error } = await searchParams;
+  const errorMessage = error ? ERROR_MESSAGES[error] : null;
+
   return (
     <main className="flex-1 flex flex-col">
       <header className="border-b border-rule">
@@ -13,22 +28,33 @@ export default function LoginPage() {
 
       <div className="flex-1 flex items-center justify-center px-6 py-16">
         <div className="max-w-md w-full">
+          <p className="editorial-meta uppercase mb-4">Sign in</p>
           <h1 className="mb-4">Welcome back.</h1>
-          <p className="text-ink-muted leading-relaxed mb-8">
-            Sign in to pick up where you left off.
+          <p className="editorial-lede text-ink-muted mb-10">
+            Enter your email and we&apos;ll send you a one-time sign-in link.
           </p>
 
-          <div className="border border-rule rounded-sm p-8 bg-paper-raised">
-            <p className="text-ink-muted text-sm leading-relaxed">
-              Auth flow coming in the next iteration. For now, this page
-              exists so the middleware redirect target works.
-            </p>
-            <p className="text-ink-subtle text-sm mt-4">
-              <Link href="/" className="underline hover:text-ink">
-                Back home
-              </Link>
-            </p>
-          </div>
+          {errorMessage && (
+            <div
+              role="alert"
+              className="mb-8 p-4 bg-notice-soft border-l-2 border-notice text-sm text-ink leading-relaxed"
+            >
+              {errorMessage}
+            </div>
+          )}
+
+          <AuthForm submitLabel="Send sign-in link" />
+
+          <p className="mt-12 pt-8 border-t border-rule text-sm text-ink-muted">
+            New to Screened?{' '}
+            <Link
+              href="/signup"
+              className="text-ink underline hover:text-accent transition-colors"
+            >
+              Create an account
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </main>

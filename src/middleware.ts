@@ -11,7 +11,19 @@ import { getServerEnv } from '@/lib/env';
  * The matcher at the bottom of this file controls which paths trigger it.
  */
 
-const PUBLIC_ROUTES = ['/', '/login', '/signup', '/auth/callback'];
+const PUBLIC_ROUTES = [
+  '/',
+  '/login',
+  '/signup',
+  '/auth/callback',
+  '/auth/verify',
+];
+
+const AUTH_PAGES_FOR_LOGGED_OUT_ONLY = [
+  '/login',
+  '/signup',
+  '/auth/verify',
+];
 
 export async function middleware(request: NextRequest) {
   const env = getServerEnv();
@@ -52,18 +64,18 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
-  const isAuthRoute = pathname === '/login' || pathname === '/signup';
+  const isLoggedOutOnlyRoute =
+    AUTH_PAGES_FOR_LOGGED_OUT_ONLY.includes(pathname);
 
   // Unauthenticated user trying to access a protected route → send to login
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('redirect', pathname);
     return NextResponse.redirect(url);
   }
 
-  // Authenticated user landing on login/signup → send to their dashboard
-  if (user && isAuthRoute) {
+  // Authenticated user landing on a logged-out-only page → send to dashboard
+  if (user && isLoggedOutOnlyRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
