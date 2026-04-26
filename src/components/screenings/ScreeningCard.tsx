@@ -38,6 +38,18 @@ export type ScreeningCardData = {
     behavioral_impact: number | null;
     play_inspiration: number | null;
   };
+  /**
+   * Analysis scores pulled from the pinned analysis_id row. Used to
+   * show key decision-relevant scores (stim, fright, violence, age)
+   * for unwatched titles in the library, where observations don't
+   * exist yet.
+   */
+  analysisScores: {
+    stimulation_intensity: number | null;
+    frightening_content: number | null;
+    violence_level: number | null;
+    age_recommendation_min: number | null;
+  } | null;
 };
 
 type Props = {
@@ -108,6 +120,8 @@ export function ScreeningCard({ screening: s }: Props) {
 
           {hasObservations ? (
             <ObservationsRow observations={s.observations} />
+          ) : s.analysisScores && hasAnyAnalysisScore(s.analysisScores) ? (
+            <AnalysisScoresRow scores={s.analysisScores} />
           ) : (
             <p className="text-sm text-ink-subtle italic">
               No observations recorded yet.
@@ -202,5 +216,53 @@ function Dots({ value }: { value: number }) {
         />
       ))}
     </span>
+  );
+}
+
+function hasAnyAnalysisScore(
+  scores: NonNullable<ScreeningCardData['analysisScores']>,
+): boolean {
+  return (
+    scores.stimulation_intensity !== null ||
+    scores.frightening_content !== null ||
+    scores.violence_level !== null ||
+    scores.age_recommendation_min !== null
+  );
+}
+
+/**
+ * For unwatched titles in the library: surface the most decision-
+ * relevant scores from the analysis. Same dimensions as the dashboard
+ * compact row, but rendered slightly larger to fit the library card.
+ */
+function AnalysisScoresRow({
+  scores,
+}: {
+  scores: NonNullable<ScreeningCardData['analysisScores']>;
+}) {
+  return (
+    <div className="flex items-center gap-x-5 gap-y-2 flex-wrap text-[11px] uppercase tracking-wider text-ink-subtle">
+      {scores.stimulation_intensity !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span>Stim</span>
+          <Dots value={scores.stimulation_intensity} />
+        </span>
+      )}
+      {scores.frightening_content !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span>Fright</span>
+          <Dots value={scores.frightening_content} />
+        </span>
+      )}
+      {scores.violence_level !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span>Violence</span>
+          <Dots value={scores.violence_level} />
+        </span>
+      )}
+      {scores.age_recommendation_min !== null && (
+        <span>Age {scores.age_recommendation_min}+</span>
+      )}
+    </div>
   );
 }

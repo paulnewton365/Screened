@@ -10,7 +10,11 @@ import { ThemesList } from '@/components/titles/ThemesList';
 import { CertificationBlock } from '@/components/titles/CertificationBlock';
 import { FitVerdictCard } from '@/components/titles/FitVerdictCard';
 import { RefreshAnalysisButton } from '@/components/titles/RefreshAnalysisButton';
+import { ChildPicker } from '@/components/titles/ChildPicker';
+import { CommunityObservations } from '@/components/titles/CommunityObservations';
 import { SaveToLibraryButton } from '@/components/screenings/SaveToLibraryButton';
+import { ageBandFromBirthDate, sensitivityBand } from '@/lib/community/bands';
+import { communityObservationSchema } from '@/lib/community/schemas';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -109,6 +113,42 @@ export default async function TitlePage({ params, searchParams }: Props) {
         })
       : null;
 
+  // Fetch the community observations row, if any, for the selected
+  // child's age + sensitivity band. The nightly rollup populates this
+  // table; we just read the precomputed aggregate.
+  let communityObservation: {
+    data: import('@/lib/community/schemas').CommunityObservation;
+    ageBand: import('@/lib/community/bands').AgeBand;
+    sensitivityBand: import('@/lib/community/bands').SensitivityBand;
+  } | null = null;
+
+  if (selectedChild) {
+    const ageBand = ageBandFromBirthDate(selectedChild.birth_date);
+    const sensBand = sensitivityBand(selectedChild);
+    if (ageBand) {
+      const { data: communityRow } = await supabase
+        .from('community_observations')
+        .select('observations')
+        .eq('title_id', id)
+        .eq('child_age_band', ageBand)
+        .eq('sensitivity_band', sensBand)
+        .maybeSingle();
+
+      if (communityRow?.observations) {
+        const parsed = communityObservationSchema.safeParse(
+          communityRow.observations,
+        );
+        if (parsed.success) {
+          communityObservation = {
+            data: parsed.data,
+            ageBand,
+            sensitivityBand: sensBand,
+          };
+        }
+      }
+    }
+  }
+
   return (
     <main className="flex-1 flex flex-col">
       <header className="border-b border-rule">
@@ -185,8 +225,13 @@ export default async function TitlePage({ params, searchParams }: Props) {
             selectedChildId={selectedChild?.id ?? null}
             selectedChildName={selectedChild?.name ?? null}
             childCount={children?.length ?? 0}
+            childOptions={(children ?? []).map((c) => ({
+              id: c.id,
+              name: c.name,
+            }))}
             existingScreeningId={existingScreeningId}
             canRefresh={canRefresh}
+            communityObservation={communityObservation}
           />
         ) : (
           <AnalysisStream titleId={id} titleName={title.title} />
@@ -207,8 +252,10 @@ function CachedAnalysisView({
   selectedChildId,
   selectedChildName,
   childCount,
+  childOptions,
   existingScreeningId,
   canRefresh,
+  communityObservation,
 }: {
   analysis: ReturnType<typeof rowToAnalysis>;
   generatedAt: string;
@@ -220,8 +267,14 @@ function CachedAnalysisView({
   selectedChildId: string | null;
   selectedChildName: string | null;
   childCount: number;
+  childOptions: Array<{ id: string; name: string }>;
   existingScreeningId: string | null;
   canRefresh: boolean;
+  communityObservation: {
+    data: import('@/lib/community/schemas').CommunityObservation;
+    ageBand: import('@/lib/community/bands').AgeBand;
+    sensitivityBand: import('@/lib/community/bands').SensitivityBand;
+  } | null;
 }) {
   const generated = new Date(generatedAt);
   const now = new Date();
@@ -284,6 +337,15 @@ function CachedAnalysisView({
           </section>
         )}
 
+        {communityObservation && selectedChildName && (
+          <CommunityObservations
+            data={communityObservation.data}
+            ageBand={communityObservation.ageBand}
+            sensitivityBand={communityObservation.sensitivityBand}
+            childName={selectedChildName}
+          />
+        )}
+
         <section>
           <p className="editorial-meta uppercase mb-3">Age picture</p>
           <h2 className="mb-4">
@@ -322,6 +384,12 @@ function CachedAnalysisView({
 
       {/* Sidebar — sticky on desktop */}
       <aside className="space-y-8 lg:sticky lg:top-8 lg:self-start">
+        <ChildPicker
+          basePath={`/titles/${titleId}`}
+          childOptions={childOptions}
+          selectedChildId={selectedChildId}
+        />
+
         {fit && selectedChildName ? (
           <FitVerdictCard fit={fit} childName={selectedChildName} />
         ) : childCount === 0 ? (
