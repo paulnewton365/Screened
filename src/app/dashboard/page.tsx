@@ -35,6 +35,46 @@ export default async function DashboardPage() {
 
   const hasChildren = (childrenData?.length ?? 0) > 0;
 
+  // Fetch screenings + the joined title info for the library list under
+  // each child card. Order most-recent first so the latest save is at
+  // the top.
+  const { data: screeningsData } = hasChildren
+    ? await supabase
+        .from('screenings')
+        .select(
+          `
+          id, child_id, title_id, fit_verdict, fit_headline, overall_score,
+          watched_at, created_at,
+          titles(id, title, release_year, type, poster_url)
+        `,
+        )
+        .order('created_at', { ascending: false })
+    : { data: null };
+
+  // Group screenings by child_id for easy lookup in ChildCard
+  const screeningsByChild = new Map<string, ChildScreening[]>();
+  for (const row of screeningsData ?? []) {
+    const titleObj = Array.isArray(row.titles) ? row.titles[0] : row.titles;
+    if (!titleObj) continue;
+    const screening: ChildScreening = {
+      id: row.id as string,
+      title_id: row.title_id as string,
+      child_id: row.child_id as string,
+      fit_verdict: row.fit_verdict as string | null,
+      fit_headline: row.fit_headline as string | null,
+      overall_score: (row.overall_score as number | null) ?? null,
+      watched_at: row.watched_at as string | null,
+      created_at: row.created_at as string,
+      title: (titleObj as { title: string }).title,
+      release_year: (titleObj as { release_year: number | null }).release_year,
+      type: (titleObj as { type: 'movie' | 'tv' }).type,
+      poster_url: (titleObj as { poster_url: string | null }).poster_url,
+    };
+    const list = screeningsByChild.get(screening.child_id) ?? [];
+    list.push(screening);
+    screeningsByChild.set(screening.child_id, list);
+  }
+
   return (
     <main className="flex-1 flex flex-col">
       <header className="border-b border-rule">
@@ -66,7 +106,10 @@ export default async function DashboardPage() {
 
       <div className="max-w-3xl mx-auto px-6 py-16 w-full">
         {hasChildren ? (
-          <ChildLibraryView childrenList={childrenData!} />
+          <ChildLibraryView
+            childrenList={childrenData!}
+            screeningsByChild={screeningsByChild}
+          />
         ) : (
           <FirstChildPrompt />
         )}
@@ -110,7 +153,28 @@ type ChildSummary = {
   emotional_sensitivity: number | null;
 };
 
-function ChildLibraryView({ childrenList }: { childrenList: ChildSummary[] }) {
+type ChildScreening = {
+  id: string;
+  title_id: string;
+  child_id: string;
+  fit_verdict: string | null;
+  fit_headline: string | null;
+  overall_score: number | null;
+  watched_at: string | null;
+  created_at: string;
+  title: string;
+  release_year: number | null;
+  type: 'movie' | 'tv';
+  poster_url: string | null;
+};
+
+function ChildLibraryView({
+  childrenList,
+  screeningsByChild,
+}: {
+  childrenList: ChildSummary[];
+  screeningsByChild: Map<string, ChildScreening[]>;
+}) {
   return (
     <>
       <div className="flex items-end justify-between mb-8 gap-6 flex-wrap">
@@ -139,14 +203,32 @@ function ChildLibraryView({ childrenList }: { childrenList: ChildSummary[] }) {
 
       <div className="space-y-6">
         {childrenList.map((child) => (
-          <ChildCard key={child.id} child={child} />
+          <ChildCard
+            key={child.id}
+            child={child}
+            screenings={screeningsByChild.get(child.id) ?? []}
+          />
         ))}
       </div>
     </>
   );
 }
 
-function ChildCard({ child }: { child: ChildSummary }) {
+const VERDICT_LABEL: Record<string, string> = {
+  great_fit: 'Great fit',
+  good_fit: 'Good fit',
+  worth_a_look: 'Worth a look',
+  stretch: 'A stretch',
+  not_a_fit_right_now: 'Not a fit right now',
+};
+
+function ChildCard({
+  child,
+  screenings,
+}: {
+  child: ChildSummary;
+  screenings: ChildScreening[];
+}) {
   const age = child.birth_date ? computeAge(child.birth_date) : null;
 
   return (
@@ -175,16 +257,79 @@ function ChildCard({ child }: { child: ChildSummary }) {
         )}
       </header>
 
-      <div className="px-8 py-10 text-center">
-        <p className="editorial-meta uppercase mb-3">Library</p>
-        <p className="text-ink-muted mb-1 leading-relaxed max-w-md mx-auto">
-          Nothing screened yet.
-        </p>
-        <p className="text-sm text-ink-subtle leading-relaxed max-w-md mx-auto">
-          Use the search above to find a title and see how it might fit{' '}
-          {child.name}.
-        </p>
-      </div>
+      {screenings.length === 0 ? (
+        <div className="px-8 py-10 text-center">
+          <p className="editorial-meta uppercase mb-3">Library</p>
+          <p className="text-ink-muted mb-1 leading-relaxed max-w-md mx-auto">
+            Nothing screened yet.
+          </p>
+          <p className="text-sm text-ink-subtle leading-relaxed max-w-md mx-auto">
+            Use the search above to find a title and see how it might fit{' '}
+            {child.name}.
+          </p>
+        </div>
+      ) : (
+        <div className="px-8 py-6">
+          <div className="flex items-baseline justify-between mb-4">
+            <p className="editorial-meta uppercase">Library</p>
+            <span className="editorial-meta">
+              {screenings.length} {screenings.length === 1 ? 'title' : 'titles'}
+            </span>
+          </div>
+          <ul className="divide-y divide-rule -mx-2">
+            {screenings.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={`/titles/${s.title_id}?child=${child.id}`}
+                  className="flex items-center gap-4 px-2 py-3 hover:bg-paper-sunken transition-colors"
+                >
+                  {s.poster_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={s.poster_url.replace('/w500', '/w92')}
+                      alt=""
+                      className="w-10 h-14 object-cover bg-paper-sunken flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-14 bg-paper-sunken flex-shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-serif text-base text-ink truncate">
+                        {s.title}
+                      </span>
+                      {s.release_year && (
+                        <span className="editorial-meta">{s.release_year}</span>
+                      )}
+                    </div>
+                    {s.fit_verdict && (
+                      <p className="text-xs text-ink-muted mt-0.5">
+                        {VERDICT_LABEL[s.fit_verdict] ?? s.fit_verdict}
+                        {s.watched_at && (
+                          <span className="text-ink-subtle">
+                            {' '}
+                            · watched{' '}
+                            {new Date(s.watched_at).toLocaleDateString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  {s.overall_score !== null && (
+                    <span className="font-mono tabular-nums text-sm text-ink-muted flex-shrink-0">
+                      {Math.round(s.overall_score)}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </article>
   );
 }

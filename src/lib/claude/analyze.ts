@@ -21,16 +21,23 @@ export type AnalysisStreamEvent =
   | { type: 'error'; message: string };
 
 /**
- * Run the analysis pipeline for a title and yield progress events.
+ * Run the analysis pipeline for a title and yield progress events
+ * in real time as the model works.
  *
- * Implementation notes:
- * - We use the Anthropic web_search tool so Claude can pull live
- *   parent-feedback sources rather than relying on its training.
- * - The submit_analysis tool forces structured JSON output. We don't
- *   need any free-form parsing.
- * - tool_choice forces Claude to eventually call submit_analysis.
- * - The stream yields events for each tool use, plus a final complete
- *   event with the validated analysis object.
+ * How the per-block streaming works:
+ *
+ * Anthropic's streaming API emits raw events including content_block_start,
+ * content_block_delta (for input_json_delta), and content_block_stop. The
+ * tool input arrives in fragments via input_json_delta. We accumulate the
+ * fragments per block index, then parse on stop — at that point we have
+ * the fully-assembled tool input WITHOUT having to wait for the whole
+ * stream to finish.
+ *
+ * This means as Claude completes each web_search, the user sees the query
+ * appear in the UI immediately, before the next search even starts.
+ *
+ * Crucially: we do NOT call stream.finalMessage() inside the iteration —
+ * that waits for the stream to end and would deadlock the for-await loop.
  */
 export async function* streamAnalysis(input: {
   title: string;
@@ -58,7 +65,7 @@ export async function* streamAnalysis(input: {
       {
         type: 'web_search_20250305',
         name: 'web_search',
-        max_uses: 10,
+        max_uses: 8,
       },
       {
         name: 'submit_analysis',
@@ -70,68 +77,94 @@ export async function* streamAnalysis(input: {
     messages: [{ role: 'user', content: userPrompt }],
   });
 
-  let pendingAnalysis: unknown = null;
+  // Per-block-index state. The stream emits events with `index` pointing
+  // at the position in the message's content array. We keep a small map
+  // so we can pair start/delta/stop events for the same block.
+  type BlockMeta = {
+    type: string;
+    name?: string;
+    inputBuffer: string;
+  };
+  const blocks: Record<number, BlockMeta> = {};
 
-  // Iterate the streaming events. We surface tool use as progress and
-  // capture the submit_analysis input as our final result.
+  let pendingAnalysis: unknown = null;
+  let analysingEmitted = false;
+  let thinkingEmitted = false;
+
   for await (const event of stream) {
     if (event.type === 'content_block_start') {
-      const block = event.content_block;
+      const cb = event.content_block;
+      const meta: BlockMeta = {
+        type: cb.type,
+        name: 'name' in cb ? cb.name : undefined,
+        inputBuffer: '',
+      };
+      blocks[event.index] = meta;
 
-      if (block.type === 'tool_use') {
-        if (block.name === 'web_search') {
-          // Web search events come with an empty input at start; the
-          // actual query arrives in input_json_delta. We'll surface
-          // the query when we see it stop.
-          yield {
-            type: 'thinking',
-            message: 'Looking for parent feedback…',
-          };
-        } else if (block.name === 'submit_analysis') {
-          yield {
-            type: 'analysing',
-            message: 'Pulling everything together…',
-          };
-        }
-      } else if (block.type === 'server_tool_use') {
-        // Anthropic's hosted web_search tool uses server_tool_use blocks.
-        if (block.name === 'web_search') {
-          yield {
-            type: 'thinking',
-            message: 'Looking for parent feedback…',
-          };
-        }
+      // Surface a "thinking" status the first time we see a web search
+      // start, before any queries have completed. This fills the gap
+      // between stream-start and the first query landing.
+      if (
+        cb.type === 'server_tool_use' &&
+        cb.name === 'web_search' &&
+        !thinkingEmitted
+      ) {
+        thinkingEmitted = true;
+        yield { type: 'thinking', message: 'Looking for parent feedback…' };
+      }
+
+      // Surface "analysing" when the submit_analysis call begins. This
+      // signals we're done searching and now Claude is synthesising.
+      if (
+        cb.type === 'tool_use' &&
+        cb.name === 'submit_analysis' &&
+        !analysingEmitted
+      ) {
+        analysingEmitted = true;
+        yield {
+          type: 'analysing',
+          message: 'Pulling everything together…',
+        };
+      }
+    }
+
+    if (event.type === 'content_block_delta') {
+      const meta = blocks[event.index];
+      if (!meta) continue;
+      // Tool input arrives as input_json_delta; we concatenate the
+      // partial JSON fragments and parse on content_block_stop.
+      if (event.delta.type === 'input_json_delta') {
+        meta.inputBuffer += event.delta.partial_json;
       }
     }
 
     if (event.type === 'content_block_stop') {
-      // Note: do NOT call stream.finalMessage() here. That waits for
-      // the entire stream to complete, but we're inside the iteration
-      // that's producing it — classic deadlock. We pull the final
-      // message AFTER the for-await loop ends.
-    }
-  }
+      const meta = blocks[event.index];
+      if (!meta) continue;
 
-  // After the stream completes, retrieve the final assembled message.
-  const final = await stream.finalMessage();
+      // Empty buffer means no JSON input on this block — that's normal
+      // for text blocks Claude might emit alongside tool calls.
+      if (!meta.inputBuffer) continue;
 
-  // Surface web_search queries from the assembled message if not already shown.
-  for (const block of final.content) {
-    if (
-      block.type === 'server_tool_use' &&
-      block.name === 'web_search' &&
-      typeof block.input === 'object' &&
-      block.input !== null &&
-      'query' in block.input &&
-      typeof (block.input as { query: unknown }).query === 'string'
-    ) {
-      yield {
-        type: 'searching',
-        query: (block.input as { query: string }).query,
-      };
-    }
-    if (block.type === 'tool_use' && block.name === 'submit_analysis') {
-      pendingAnalysis = block.input;
+      let parsedInput: unknown;
+      try {
+        parsedInput = JSON.parse(meta.inputBuffer);
+      } catch {
+        // Malformed partial — skip silently. Real failures will surface
+        // when we validate the final analysis.
+        continue;
+      }
+
+      if (meta.type === 'server_tool_use' && meta.name === 'web_search') {
+        const query = (parsedInput as { query?: unknown })?.query;
+        if (typeof query === 'string' && query.trim()) {
+          yield { type: 'searching', query };
+        }
+      }
+
+      if (meta.type === 'tool_use' && meta.name === 'submit_analysis') {
+        pendingAnalysis = parsedInput;
+      }
     }
   }
 
@@ -144,10 +177,7 @@ export async function* streamAnalysis(input: {
     return;
   }
 
-  // Validate the structured output against our Zod schema. If Claude
-  // returned something malformed (rare with forced tool use, but
-  // possible) we surface a clear error rather than silently storing
-  // garbage.
+  // Validate the structured output against our Zod schema.
   const parsed = analysisSchema.safeParse(pendingAnalysis);
   if (!parsed.success) {
     yield {

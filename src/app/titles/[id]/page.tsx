@@ -9,6 +9,7 @@ import { Scorecard } from '@/components/titles/Scorecard';
 import { ThemesList } from '@/components/titles/ThemesList';
 import { CertificationBlock } from '@/components/titles/CertificationBlock';
 import { FitVerdictCard } from '@/components/titles/FitVerdictCard';
+import { SaveToLibraryButton } from '@/components/screenings/SaveToLibraryButton';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -67,6 +68,20 @@ export default async function TitlePage({ params, searchParams }: Props) {
 
   const selectedChild =
     children?.find((c) => c.id === childIdParam) ?? children?.[0] ?? null;
+
+  // If we have a selected child, look for an existing screening for this
+  // child+title pair. Used to flip the "Save to library" button into
+  // "Already saved" mode.
+  let existingScreeningId: string | null = null;
+  if (selectedChild) {
+    const { data: existing } = await supabase
+      .from('screenings')
+      .select('id')
+      .eq('child_id', selectedChild.id)
+      .eq('title_id', id)
+      .maybeSingle();
+    existingScreeningId = existing?.id ?? null;
+  }
 
   const analysis = analysisRow ? rowToAnalysis(analysisRow as TitleAnalysisRow) : null;
 
@@ -153,8 +168,11 @@ export default async function TitlePage({ params, searchParams }: Props) {
             confidence={analysisRow!.confidence}
             sourceCount={analysisRow!.source_count}
             fit={fit}
+            titleId={id}
+            selectedChildId={selectedChild?.id ?? null}
             selectedChildName={selectedChild?.name ?? null}
             childCount={children?.length ?? 0}
+            existingScreeningId={existingScreeningId}
           />
         ) : (
           <AnalysisStream titleId={id} titleName={title.title} />
@@ -170,16 +188,22 @@ function CachedAnalysisView({
   confidence,
   sourceCount,
   fit,
+  titleId,
+  selectedChildId,
   selectedChildName,
   childCount,
+  existingScreeningId,
 }: {
   analysis: ReturnType<typeof rowToAnalysis>;
   generatedAt: string;
   confidence: 'high' | 'medium' | 'low';
   sourceCount: number;
   fit: ReturnType<typeof computeFit> | null;
+  titleId: string;
+  selectedChildId: string | null;
   selectedChildName: string | null;
   childCount: number;
+  existingScreeningId: string | null;
 }) {
   const generated = new Date(generatedAt);
   const now = new Date();
@@ -297,6 +321,17 @@ function CachedAnalysisView({
             </Link>
           </div>
         ) : null}
+
+        {selectedChildId && selectedChildName && (
+          <div className="border border-rule rounded-sm bg-paper-raised p-6">
+            <SaveToLibraryButton
+              titleId={titleId}
+              childId={selectedChildId}
+              childName={selectedChildName}
+              existingScreeningId={existingScreeningId}
+            />
+          </div>
+        )}
 
         <Scorecard analysis={analysis} />
       </aside>
