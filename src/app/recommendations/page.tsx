@@ -1,5 +1,7 @@
+import { after } from 'next/server';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/service';
 import { AgeBandFilter } from '@/components/recommendations/AgeBandFilter';
 import {
   RecommendationCard,
@@ -10,10 +12,23 @@ import {
   AGE_BAND_LABEL,
   type AgeBand,
 } from '@/lib/recommendations/schemas';
+import {
+  curateAgeBand,
+  resolveCuratedTitles,
+} from '@/lib/recommendations/curate';
+import { replaceRecommendationsForBand } from '@/lib/recommendations/store';
 
 type Props = {
   searchParams: Promise<{ band?: string }>;
 };
+
+/**
+ * Allow up to 5 minutes for the bootstrap path. Normal page renders
+ * still respond quickly — this just gives the post-response `after()`
+ * callback enough time to finish curating all 7 bands in parallel
+ * (typically ~60-90 seconds total).
+ */
+export const maxDuration = 300;
 
 /**
  * /recommendations — public discovery page.
@@ -21,6 +36,12 @@ type Props = {
  * Shows the top 5 most-recommended titles per age band, sourced from
  * Common Sense Media, Rotten Tomatoes Family, IMDb Parents Guide, and
  * other parent-focused lists. Refreshed monthly by a cron.
+ *
+ * On first deploy, the table is empty. To avoid asking the user to
+ * manually trigger the cron, we bootstrap on first visit: when this
+ * page renders and finds the entire table empty, it fires the cron
+ * route in the background via Next.js `after()`. The monthly cron
+ * continues to run independently.
  *
  * Public — accessible to signed-out visitors. Click-through routes
  * through /titles/resolve which is auth-gated, so anonymous users get
@@ -45,6 +66,14 @@ export default async function RecommendationsPage({ searchParams }: Props) {
     )
     .eq('age_band', selectedBand)
     .order('rank', { ascending: true });
+
+  // Bootstrap-on-first-visit. We check the WHOLE table (not just this
+  // band) so that hitting one band initialises everything. Uses the
+  // service-role client to bypass RLS for this admin-y count.
+  let bootstrapStarted = false;
+  if ((rows ?? []).length === 0) {
+    bootstrapStarted = await maybeBootstrapCuration();
+  }
 
   const recommendations: RecommendationData[] = (rows ?? []).map((r) => ({
     rank: r.rank as number,
@@ -133,11 +162,25 @@ export default async function RecommendationsPage({ searchParams }: Props) {
 
         {recommendations.length === 0 ? (
           <div className="border border-rule rounded-sm bg-paper-raised p-12 text-center">
-            <p className="editorial-meta uppercase mb-3">Coming soon</p>
-            <p className="text-ink-muted leading-relaxed max-w-md mx-auto">
-              We&rsquo;re still gathering recommendations for this age band.
-              Check back after the next monthly refresh.
-            </p>
+            {bootstrapStarted ? (
+              <>
+                <p className="editorial-meta uppercase mb-3">First batch loading</p>
+                <p className="text-ink-muted leading-relaxed max-w-md mx-auto">
+                  We just kicked off the first round of recommendations.
+                  This takes about 5 minutes — Claude is searching across
+                  parent forums and review sites for each age band. Refresh
+                  this page in a few minutes and the cards will be here.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="editorial-meta uppercase mb-3">Coming soon</p>
+                <p className="text-ink-muted leading-relaxed max-w-md mx-auto">
+                  We&rsquo;re still gathering recommendations for this age
+                  band. Check back after the next monthly refresh.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
@@ -178,4 +221,57 @@ function daysSince(iso: string): number {
   return Math.floor(
     (now.getTime() - generated.getTime()) / (1000 * 60 * 60 * 24),
   );
+}
+
+/**
+ * If the recommendations table is empty, kick off the curation in the
+ * background. Returns true when we actually started one, false otherwise.
+ *
+ * Implementation note: we call the curation functions directly here
+ * rather than firing an HTTP request to the cron route. That sidesteps
+ * any concerns about the CRON_SECRET env var, the host header, or
+ * server-to-server auth — we're already in trusted backend code.
+ *
+ * The curation runs in parallel across all 7 age bands (~60-90s total)
+ * via Promise.allSettled, so a failure in one band doesn't take down
+ * the rest. `after()` runs this after the page response is sent so the
+ * visitor doesn't wait.
+ *
+ * Dedup: once any rows exist (any band), this returns false. There's a
+ * small window during the very first run where two concurrent visits
+ * could both trigger — accepted risk, costs one redundant curation.
+ */
+async function maybeBootstrapCuration(): Promise<boolean> {
+  const service = createServiceRoleClient();
+
+  let isEmpty = false;
+  try {
+    const { count } = await service
+      .from('recommendations')
+      .select('*', { count: 'exact', head: true });
+    isEmpty = (count ?? 0) === 0;
+  } catch {
+    // Couldn't even read the table — likely the migration didn't run.
+    // Don't trigger; the page will show "Coming soon" and the user
+    // will know something is off when no data ever appears.
+    return false;
+  }
+
+  if (!isEmpty) return false;
+
+  after(async () => {
+    await Promise.allSettled(
+      AGE_BANDS.map(async (band) => {
+        try {
+          const curated = await curateAgeBand(band);
+          const resolved = await resolveCuratedTitles(curated);
+          await replaceRecommendationsForBand(band, resolved);
+        } catch (err) {
+          console.error('[bootstrap] curation failed for', band, err);
+        }
+      }),
+    );
+  });
+
+  return true;
 }
